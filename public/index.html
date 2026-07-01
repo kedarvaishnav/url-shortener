@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>shorten — url shortener</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #10131a;
+    --panel: #171b24;
+    --panel-raised: #1d222e;
+    --border: #2a2f3d;
+    --text: #e7e5de;
+    --text-dim: #8b92a4;
+    --accent: #6ee7c4;
+    --accent-dim: #3f9c85;
+    --warn: #f2a65a;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+  }
+
+  body {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 8vh 20px 40px;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(110, 231, 196, 0.06), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(110, 231, 196, 0.04), transparent 45%);
+  }
+
+  main {
+    width: 100%;
+    max-width: 640px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: clamp(28px, 5vw, 38px);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+
+  h1 .dim { color: var(--text-dim); }
+
+  p.lede {
+    font-size: 15px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin: 0 0 36px;
+    max-width: 46ch;
+  }
+
+  .terminal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.6);
+  }
+
+  .terminal-chrome {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel-raised);
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--border);
+  }
+
+  .terminal-chrome span.label {
+    margin-left: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .terminal-body {
+    padding: 20px;
+  }
+
+  form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 14px;
+  }
+
+  .prompt {
+    color: var(--accent);
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  input[type="text"] {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 8px 0;
+    min-width: 0;
+  }
+
+  input[type="text"]::placeholder {
+    color: var(--text-dim);
+    opacity: 0.6;
+  }
+
+  button {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--accent);
+    color: #0b1410;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+
+  button:hover { background: #82ecd1; }
+  button:active { transform: scale(0.97); }
+  button:disabled {
+    background: var(--border);
+    color: var(--text-dim);
+    cursor: not-allowed;
+  }
+
+  .log {
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+
+  .log:empty { border-top: none; }
+
+  .entry {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 13.5px;
+    animation: rise 0.25s ease;
+  }
+
+  .entry:last-child { border-bottom: none; }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .entry-input {
+    color: var(--text-dim);
+    word-break: break-all;
+    margin-bottom: 8px;
+  }
+
+  .entry-input .prompt { color: var(--text-dim); }
+
+  .entry-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .arrow { color: var(--accent-dim); flex-shrink: 0; }
+
+  .entry-result a {
+    color: var(--accent);
+    text-decoration: none;
+    word-break: break-all;
+  }
+
+  .entry-result a:hover { text-decoration: underline; }
+
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 5px;
+  }
+
+  .copy-btn:hover {
+    color: var(--text);
+    border-color: var(--accent-dim);
+    background: transparent;
+  }
+
+  .copy-btn.copied {
+    color: var(--accent);
+    border-color: var(--accent-dim);
+  }
+
+  .entry-error {
+    color: var(--warn);
+  }
+
+  .entry-error::before {
+    content: "error: ";
+    color: var(--warn);
+    opacity: 0.8;
+  }
+
+  footer {
+    margin-top: 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  footer a { color: var(--text-dim); }
+  footer a:hover { color: var(--accent); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .entry { animation: none; }
+  }
+
+  @media (max-width: 480px) {
+    form { flex-wrap: wrap; }
+    button { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">$ url-shortener</div>
+  <h1>Six characters is<br><span class="dim">plenty.</span></h1>
+  <p class="lede">Paste a long URL below. Every link you shorten in this session shows up in the log underneath, like a running REPL history.</p>
+
+  <div class="terminal">
+    <div class="terminal-chrome">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <span class="label">session</span>
+    </div>
+    <div class="terminal-body">
+      <form id="shorten-form">
+        <span class="prompt">$</span>
+        <input
+          type="text"
+          id="url-input"
+          placeholder="https://example.com/very/long/path"
+          autocomplete="off"
+          spellcheck="false"
+          required
+        />
+        <button type="submit" id="submit-btn">Shorten</button>
+      </form>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <footer>
+    <span>POST /shorten · GET /:code · GET /health</span>
+    <a href="https://github.com" target="_blank" rel="noopener">source</a>
+  </footer>
+</main>
+
+<script>
+  const form = document.getElementById('shorten-form');
+  const input = document.getElementById('url-input');
+  const button = document.getElementById('submit-btn');
+  const log = document.getElementById('log');
+
+  function truncate(str, max) {
+    return str.length > max ? str.slice(0, max - 1) + '…' : str;
+  }
+
+  function addEntry(inputUrl, { shortUrl, error } = {}) {
+    const entry = document.createElement('div');
+    entry.className = 'entry';
+
+    const inputLine = document.createElement('div');
+    inputLine.className = 'entry-input';
+    inputLine.innerHTML = '<span class="prompt">$</span> shorten ' + truncate(inputUrl, 70);
+    entry.appendChild(inputLine);
+
+    if (error) {
+      const errLine = document.createElement('div');
+      errLine.className = 'entry-error';
+      errLine.textContent = error;
+      entry.appendChild(errLine);
+    } else {
+      const resultLine = document.createElement('div');
+      resultLine.className = 'entry-result';
+
+      const arrow = document.createElement('span');
+      arrow.className = 'arrow';
+      arrow.textContent = '→';
+
+      const link = document.createElement('a');
+      link.href = shortUrl;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = shortUrl;
+
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'copy-btn';
+      copyBtn.textContent = 'copy';
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(shortUrl);
+          copyBtn.textContent = 'copied';
+          copyBtn.classList.add('copied');
+          setTimeout(() => {
+            copyBtn.textContent = 'copy';
+            copyBtn.classList.remove('copied');
+          }, 1500);
+        } catch (err) {
+          copyBtn.textContent = 'failed';
+        }
+      });
+
+      resultLine.appendChild(arrow);
+      resultLine.appendChild(link);
+      resultLine.appendChild(copyBtn);
+      entry.appendChild(resultLine);
+    }
+
+    log.prepend(entry);
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = input.value.trim();
+    if (!url) return;
+
+    button.disabled = true;
+    button.textContent = 'shortening…';
+
+    try {
+      const res = await fetch('/shorten', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        addEntry(url, { error: data.error || 'something went wrong' });
+      } else {
+        addEntry(url, { shortUrl: data.shortUrl });
+        input.value = '';
+      }
+    } catch (err) {
+      addEntry(url, { error: 'could not reach the server' });
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Shorten';
+      input.focus();
+    }
+  });
+</script>
+</body>
+</html>
