@@ -1,0 +1,8 @@
+services:
+  api:
+    build:
+      target: dev
+    volumes:
+      - .:/app
+      - /app/server/node_modules
+    command: npm run dev
