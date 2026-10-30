@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { resolveCode, shortenUrl } from '../services/urlService.js';
+import { getStats } from '../services/bloomFilter.js';
 
 const router = Router();
 
@@ -16,6 +17,14 @@ function isValidUrl(value) {
 
 router.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
+});
+
+router.get('/stats', async (req, res, next) => {
+  try {
+    return res.status(200).json({ bloom: await getStats() });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 router.post('/shorten', async (req, res, next) => {

@@ -83,6 +83,22 @@ test('GET /health returns the documented status', async () => {
   assert.deepEqual(await response.json(), { status: 'ok' });
 });
 
+test('GET /stats returns Bloom filter statistics', async () => {
+  const response = await fetch(`${baseUrl}/stats`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    bloom: {
+      bits: 9585059,
+      hashes: 7,
+      expectedItems: 1000000,
+      targetFalsePositiveRate: 0.01,
+      itemsAdded: 0,
+      bitsSet: 0,
+      estimatedFalsePositiveRate: 0,
+    },
+  });
+});
+
 test('POST /shorten rejects missing and non-http URLs', async () => {
   for (const body of [{}, { url: 'ftp://example.com' }]) {
     const response = await fetch(`${baseUrl}/shorten`, {
@@ -112,6 +128,16 @@ test('POST /shorten creates a link and GET /:code redirects to its destination',
   const redirect = await fetch(result.shortUrl, { redirect: 'manual' });
   assert.equal(redirect.status, 302);
   assert.equal(redirect.headers.get('location'), destination);
+});
+
+test('GET /stats reflects links added to the filter', async () => {
+  const response = await fetch(`${baseUrl}/stats`);
+  const result = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(result.bloom.itemsAdded, 1);
+  assert.ok(result.bloom.bitsSet > 0);
+  assert.ok(result.bloom.estimatedFalsePositiveRate > 0);
 });
 
 test('GET /:code returns 404 for an unknown code', async () => {
