@@ -83,6 +83,16 @@ test('GET /health returns the documented status', async () => {
   assert.deepEqual(await response.json(), { status: 'ok' });
 });
 
+test('GET / serves the built client application', async () => {
+  const response = await fetch(`${baseUrl}/`);
+  const page = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /text\/html/);
+  assert.match(page, /<title>Linkform \| URL Shortener<\/title>/);
+  assert.match(page, /\/assets\//);
+});
+
 test('GET /stats returns Bloom filter statistics', async () => {
   const response = await fetch(`${baseUrl}/stats`);
   assert.equal(response.status, 200);

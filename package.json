@@ -1,18 +1,20 @@
 {
   "name": "url-shortener",
   "version": "1.0.0",
-  "description": "Minimal URL shortener service backed by Redis",
-  "main": "index.js",
-  "type": "module",
+  "description": "URL shortener with a React SPA, Express APIs, Redis storage, and click analytics",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "express": "^4.19.2",
-    "redis": "^4.6.13",
-    "nanoid": "^5.0.7"
+    "dev": "npm run dev --workspace server",
+    "dev:server": "npm run dev --workspace server",
+    "dev:client": "npm run dev --workspace client",
+    "build": "npm run build --workspace client",
+    "start": "npm run start --workspace server"
   }
 }

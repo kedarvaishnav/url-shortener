@@ -3,6 +3,9 @@ services:
     build:
       target: dev
     volumes:
-      - .:/app
+      - ./server/src:/app/server/src
+      - ./server/scripts:/app/server/scripts
+      - ./server/tests:/app/server/tests
+      - ./server/package.json:/app/server/package.json
       - /app/server/node_modules
     command: npm run dev
