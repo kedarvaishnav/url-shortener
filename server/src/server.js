@@ -1,9 +1,11 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { redisClient } from './redis/client.js';
+import { prepare } from './services/bloomFilter.js';
 
 async function startServer() {
   await redisClient.connect();
+  await prepare();
   const app = createApp();
   const server = app.listen(config.port, () => {
     console.log(`[server] API listening on ${config.port}`);
