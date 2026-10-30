@@ -1,23 +1,39 @@
 services:
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   api:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runtime
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
     environment:
-      - PORT=3000
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - BASE_URL=http://localhost:3000
+      PORT: 3000
+      BASE_URL: ${BASE_URL:-http://localhost:3000}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: ${REDIS_DB:-0}
+      BLOOM_EXPECTED_ITEMS: ${BLOOM_EXPECTED_ITEMS:-1000000}
+      BLOOM_FALSE_POSITIVE_RATE: ${BLOOM_FALSE_POSITIVE_RATE:-0.01}
     depends_on:
-      - redis
-    restart: unless-stopped
-
-  redis:
-    image: redis:7.2-alpine
-    volumes:
-      - redis-data:/data
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
 volumes:

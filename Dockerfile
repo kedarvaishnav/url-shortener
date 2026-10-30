@@ -1,34 +1,29 @@
-# ---------- Stage 1: build ----------
-FROM node:20-alpine AS build
+FROM node:20-alpine AS base
 
-WORKDIR /app
+WORKDIR /app/server
 
-# Install dependencies using the lockfile for reproducible builds
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
-
-# Copy application source
-COPY index.js ./
-COPY public ./public
-
-# ---------- Stage 2: runtime ----------
-FROM node:20-alpine AS runtime
-
-ENV NODE_ENV=production
-WORKDIR /app
-
-# Create a dedicated non-root user/group to run the app
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
-# Copy only what's needed to run the app from the build stage
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/index.js ./index.js
-COPY --from=build /app/public ./public
-
-# Drop privileges
-USER appuser
+COPY server/package.json server/package-lock.json ./
+RUN npm ci
 
 EXPOSE 3000
 
-CMD ["node", "index.js"]
+FROM base AS dev
+
+WORKDIR /app
+COPY . .
+WORKDIR /app/server
+CMD ["npm", "run", "dev"]
+
+FROM node:20-alpine AS runtime
+
+ENV NODE_ENV=production
+WORKDIR /app/server
+
+COPY server/package.json server/package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY server/src ./src
+
+USER node
+EXPOSE 3000
+CMD ["npm", "start"]
