@@ -33,7 +33,7 @@ async function getSourceSnapshot() {
 }
 
 function startServer() {
-  serverProcess = spawn(process.execPath, ['src/index.js'], { stdio: 'inherit' });
+  serverProcess = spawn(process.execPath, ['src/server.js'], { stdio: 'inherit' });
 }
 
 async function restartServer() {
