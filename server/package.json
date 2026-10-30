@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/watch.js",
     "start": "node src/server.js",
-    "test": "node --test tests/"
+    "test": "node --test --test-concurrency=1 tests/"
   },
   "dependencies": {
     "cors": "^2.8.5",
