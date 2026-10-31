@@ -1,3 +1,3 @@
-export function urlKey(code) {
-  return `url:${code}`;
+export function urlCacheKey(code) {
+  return `cache:url:${code}`;
 }

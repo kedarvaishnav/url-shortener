@@ -6,6 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, beforeEach, test } from 'node:test';
 import { config } from '../src/config.js';
+import { mysqlPool } from '../src/mysql/pool.js';
+import { ensureSchema, findUrl, insertUrl } from '../src/mysql/urlRepository.js';
 import { redisClient } from '../src/redis/client.js';
 import { prepare } from '../src/services/bloomFilter.js';
 
@@ -73,28 +75,32 @@ async function stopServer(child) {
 
 before(async () => {
   assert.equal(config.redisDatabase, 15, 'tests must run with REDIS_DB=15');
+  await ensureSchema();
   await redisClient.connect();
 });
 
 beforeEach(async () => {
   await redisClient.flushDb();
+  await mysqlPool.query('DELETE FROM short_urls');
+  await mysqlPool.query('DELETE FROM app_migrations');
 });
 
 after(async () => {
   if (redisClient.isOpen) await redisClient.quit();
+  await mysqlPool.end();
 });
 
 test('rebuilds a missing filter before the API starts serving links', async () => {
   const destination = 'https://example.com/kept-link';
-  await redisClient.set('url:abc123', destination);
-  await redisClient.del('bloom:urls', 'bloom:urls:meta');
+  await insertUrl('abc123', destination);
+  await redisClient.del(['bloom:urls', 'bloom:urls:meta']);
 
   const { child, baseUrl } = await startServer();
   try {
     const response = await fetch(`${baseUrl}/abc123`, { redirect: 'manual' });
     assert.equal(response.status, 302);
     assert.equal(response.headers.get('location'), destination);
-    assert.equal(await redisClient.hGet('bloom:urls:meta', 'itemsAdded'), '1');
+    assert.equal(await redisClient.hGet('bloom:urls:meta', 'source'), 'mysql');
   } finally {
     await stopServer(child);
   }
@@ -102,7 +108,7 @@ test('rebuilds a missing filter before the API starts serving links', async () =
 
 test('rebuilds the filter when its configured size changes', async () => {
   const destination = 'https://example.com/config-change';
-  await redisClient.set('url:xyz789', destination);
+  await insertUrl('xyz789', destination);
   await prepare();
   assert.equal(await redisClient.hGet('bloom:urls:meta', 'expectedItems'), '1000000');
 
@@ -112,11 +118,27 @@ test('rebuilds the filter when its configured size changes', async () => {
     const expectedBits = Math.ceil(-(500000 * Math.log(0.01)) / (Math.log(2) ** 2));
     assert.equal(metadata.expectedItems, '500000');
     assert.equal(metadata.bits, String(expectedBits));
-    assert.equal(metadata.itemsAdded, '1');
+    assert.equal(metadata.source, 'mysql');
 
     const response = await fetch(`${baseUrl}/xyz789`, { redirect: 'manual' });
     assert.equal(response.status, 302);
     assert.equal(response.headers.get('location'), destination);
+  } finally {
+    await stopServer(child);
+  }
+});
+
+test('imports legacy Redis mappings into MySQL before serving requests', async () => {
+  const destination = 'https://example.com/legacy';
+  await redisClient.set('url:old123', destination);
+
+  const { child, baseUrl } = await startServer();
+  try {
+    const response = await fetch(`${baseUrl}/old123`, { redirect: 'manual' });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), destination);
+    assert.equal(await findUrl('old123'), destination);
+    assert.equal(await redisClient.get('url:old123'), null);
   } finally {
     await stopServer(child);
   }

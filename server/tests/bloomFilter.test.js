@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
 import { config } from '../src/config.js';
-import { add, getStats, mightContain, prepare } from '../src/services/bloomFilter.js';
+import { mysqlPool } from '../src/mysql/pool.js';
+import { ensureSchema, insertUrl } from '../src/mysql/urlRepository.js';
+import { add, addMany, getStats, mightContain, prepare } from '../src/services/bloomFilter.js';
 import { redisClient } from '../src/redis/client.js';
 
 function createUniqueCodes(count, excluded = new Set()) {
@@ -16,15 +18,19 @@ function createUniqueCodes(count, excluded = new Set()) {
 
 before(async () => {
   assert.equal(config.redisDatabase, 15, 'tests must run with REDIS_DB=15');
+  await ensureSchema();
   await redisClient.connect();
 });
 
 beforeEach(async () => {
   await redisClient.flushDb();
+  await mysqlPool.query('DELETE FROM short_urls');
+  await prepare();
 });
 
 after(async () => {
   if (redisClient.isOpen) await redisClient.quit();
+  await mysqlPool.end();
 });
 
 test('calculates the documented filter size', async () => {
@@ -67,15 +73,22 @@ test('keeps the measured false-positive rate below twice the target', async () =
   assert.ok(measuredRate < 2 * config.bloomFalsePositiveRate);
 });
 
-test('rebuilds the filter from saved URL keys', async () => {
+test('adds a group of aliases to the filter', async () => {
+  const codes = createUniqueCodes(5);
+  await addMany(codes);
+  for (const code of codes) assert.equal(await mightContain(code), true, `batch missed ${code}`);
+});
+
+test('rebuilds the filter from MySQL aliases', async () => {
   const codes = createUniqueCodes(5);
   for (const code of codes) {
-    await redisClient.set(`url:${code}`, 'https://example.com');
+    await insertUrl(code, 'https://example.com');
   }
+  await redisClient.del(['bloom:urls', 'bloom:urls:meta']);
   await prepare();
 
   for (const code of codes) {
-    assert.equal(await mightContain(code), true);
+    assert.equal(await mightContain(code), true, `rebuilt filter missed ${code}`);
   }
   assert.equal((await getStats()).itemsAdded, codes.length);
 });

@@ -1,4 +1,21 @@
 services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-url_shortener}
+      MYSQL_USER: url_shortener_app
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./server/sql/01-test-database.sql:/docker-entrypoint-initdb.d/01-test-database.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   redis:
     image: redis:7.2-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -24,9 +41,18 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: ${REDIS_DB:-0}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: url_shortener_app
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-url_shortener}
+      MYSQL_POOL_SIZE: ${MYSQL_POOL_SIZE:-10}
+      REDIS_CACHE_TTL_SECONDS: ${REDIS_CACHE_TTL_SECONDS:-3600}
       BLOOM_EXPECTED_ITEMS: ${BLOOM_EXPECTED_ITEMS:-1000000}
       BLOOM_FALSE_POSITIVE_RATE: ${BLOOM_FALSE_POSITIVE_RATE:-0.01}
     depends_on:
+      mysql:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -37,4 +63,5 @@ services:
     restart: unless-stopped
 
 volumes:
+  mysql-data:
   redis-data:

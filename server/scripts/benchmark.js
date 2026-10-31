@@ -1,17 +1,24 @@
 import { randomBytes } from 'node:crypto';
 import { config } from '../src/config.js';
+import { listAliasesAfter } from '../src/mysql/urlRepository.js';
 import { redisClient } from '../src/redis/client.js';
 import { mightContain } from '../src/services/bloomFilter.js';
 
 const REQUEST_COUNT = 10000;
 const REQUEST_BATCH_SIZE = 100;
-const URL_KEY_PREFIX = 'url:';
+const PAGE_SIZE = 1000;
 
 async function getExistingCodes() {
   const codes = new Set();
-  for await (const key of redisClient.scanIterator({ MATCH: `${URL_KEY_PREFIX}*`, COUNT: 1000 })) {
-    codes.add(key.slice(URL_KEY_PREFIX.length));
+
+  let lastAlias = '';
+  while (true) {
+    const aliases = await listAliasesAfter(lastAlias, PAGE_SIZE);
+    if (aliases.length === 0) break;
+    for (const alias of aliases) codes.add(alias);
+    lastAlias = aliases.at(-1);
   }
+
   return codes;
 }
 
@@ -59,9 +66,9 @@ async function runBenchmark() {
     const avoidedPercent = ((avoidedLookups / REQUEST_COUNT) * 100).toFixed(2);
 
     console.log(`Unknown requests completed: ${notFoundResponses}/${REQUEST_COUNT}`);
-    console.log(`Redis GETs without Bloom filter: ${REQUEST_COUNT}`);
-    console.log(`Redis GETs with Bloom filter: ${filterHits}`);
-    console.log(`Redis GETs avoided: ${avoidedLookups} (${avoidedPercent}%)`);
+    console.log(`MySQL lookups without Bloom filter: ${REQUEST_COUNT}`);
+    console.log(`MySQL lookups with Bloom filter: ${filterHits}`);
+    console.log(`MySQL lookups avoided: ${avoidedLookups} (${avoidedPercent}%)`);
     console.log(`Request time: ${durationMs} ms`);
   } finally {
     if (redisClient.isOpen) await redisClient.quit();

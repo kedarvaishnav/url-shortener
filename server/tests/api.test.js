@@ -5,6 +5,8 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, test } from 'node:test';
+import { mysqlPool } from '../src/mysql/pool.js';
+import { ensureSchema } from '../src/mysql/urlRepository.js';
 import { createClient } from 'redis';
 
 const SERVER_DIRECTORY = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -58,6 +60,9 @@ before(async () => {
   assert.equal(REDIS_DB, 15, 'tests must run with REDIS_DB=15');
   await redisClient.connect();
   await redisClient.flushDb();
+  await ensureSchema();
+  await mysqlPool.query('DELETE FROM short_urls');
+  await mysqlPool.query('DELETE FROM app_migrations');
 
   const port = await getAvailablePort();
   baseUrl = `http://127.0.0.1:${port}`;
@@ -75,6 +80,7 @@ after(async () => {
     await once(serverProcess, 'exit');
   }
   if (redisClient.isOpen) await redisClient.quit();
+  await mysqlPool.end();
 });
 
 test('GET /health returns the documented status', async () => {
@@ -138,6 +144,7 @@ test('POST /shorten creates a link and GET /:code redirects to its destination',
   const redirect = await fetch(result.shortUrl, { redirect: 'manual' });
   assert.equal(redirect.status, 302);
   assert.equal(redirect.headers.get('location'), destination);
+  assert.equal(await redisClient.get(`cache:url:${shortUrl.pathname.slice(1)}`), destination);
 });
 
 test('GET /stats reflects links added to the filter', async () => {

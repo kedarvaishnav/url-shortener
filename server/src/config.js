@@ -7,6 +7,9 @@ function getNumber(name, defaultValue) {
 const port = getNumber('PORT', 3000);
 const redisPort = getNumber('REDIS_PORT', 6379);
 const redisDatabase = getNumber('REDIS_DB', 0);
+const mysqlPort = getNumber('MYSQL_PORT', 3306);
+const mysqlPoolSize = getNumber('MYSQL_POOL_SIZE', 10);
+const redisCacheTtlSeconds = getNumber('REDIS_CACHE_TTL_SECONDS', 3600);
 const expectedItems = getNumber('BLOOM_EXPECTED_ITEMS', 1000000);
 const falsePositiveRate = getNumber('BLOOM_FALSE_POSITIVE_RATE', 0.01);
 
@@ -18,6 +21,15 @@ if (!Number.isInteger(redisPort) || redisPort < 1 || redisPort > 65535) {
 }
 if (!Number.isInteger(redisDatabase) || redisDatabase < 0) {
   throw new Error('REDIS_DB must be a non-negative integer.');
+}
+if (!Number.isInteger(mysqlPort) || mysqlPort < 1 || mysqlPort > 65535) {
+  throw new Error('MYSQL_PORT must be an integer between 1 and 65535.');
+}
+if (!Number.isInteger(mysqlPoolSize) || mysqlPoolSize < 1) {
+  throw new Error('MYSQL_POOL_SIZE must be a positive integer.');
+}
+if (!Number.isInteger(redisCacheTtlSeconds) || redisCacheTtlSeconds < 1) {
+  throw new Error('REDIS_CACHE_TTL_SECONDS must be a positive integer.');
 }
 if (!Number.isInteger(expectedItems) || expectedItems < 1) {
   throw new Error('BLOOM_EXPECTED_ITEMS must be a positive integer.');
@@ -45,6 +57,13 @@ export const config = Object.freeze({
   redisHost: process.env.REDIS_HOST || 'localhost',
   redisPort,
   redisDatabase,
+  mysqlHost: process.env.MYSQL_HOST || 'localhost',
+  mysqlPort,
+  mysqlUser: process.env.MYSQL_USER || 'url_shortener_app',
+  mysqlPassword: process.env.MYSQL_PASSWORD || '',
+  mysqlDatabase: process.env.MYSQL_DATABASE || 'url_shortener',
+  mysqlPoolSize,
+  redisCacheTtlSeconds,
   bloomExpectedItems: expectedItems,
   bloomFalsePositiveRate: falsePositiveRate,
 });
