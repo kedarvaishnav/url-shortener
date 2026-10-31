@@ -1,32 +1,34 @@
 # Linkform URL Shortener
 
-Linkform is a Docker-only URL shortener built with React, Express, and Redis. It stores short-code mappings in Redis and uses a Redis-backed Bloom filter to reject codes that definitely do not exist without a URL lookup.
+Linkform creates short links with a React client, an Express API, MySQL storage, and Redis caching. A Redis-backed Bloom filter tracks aliases in MySQL and rejects definite misses before a SQL lookup.
 
 ## Architecture
 
 ```text
 Browser
-  │
-  ├── GET /                 ──► React app served by Express
-  ├── POST /shorten         ──► URL service ──► Redis: SET url:<code>
-  ├── GET /<code>           ──► Bloom filter ──► Redis: GET url:<code> (possible match)
-  ├── GET /stats            ──► Bloom filter statistics
-  └── GET /health           ──► health response
-                                   │
-                                   └── definite filter miss ──► 404, no URL GET
+  ├── GET / ─────────────────────────► React client served by Express
+  ├── POST /shorten ──► Bloom filter ─► MySQL INSERT (alias + destination)
+  └── GET /:code ─────► Redis cache ──► redirect on cache hit
+                          │ cache miss
+                          ▼
+                       Bloom filter ─► 404 on definite miss
+                          │ possible match
+                          ▼
+                         MySQL ──────► cache result in Redis and redirect
 ```
 
-New codes enter the Bloom filter before their URLs are saved. This ordering avoids a saved URL being absent from the filter after a crash. The filter is shared by API containers through Redis.
+MySQL is the permanent URL store. Redis holds temporary URL cache entries and the shared Bloom bitmap. The API imports existing `url:<code>` Redis mappings into MySQL once at startup, then removes each legacy key after it is copied successfully.
 
 ## Quick start
 
-```bash
+Copy `.env.example` to `.env`, replace the two local MySQL password placeholders, then start the containers:
+
+```powershell
+Copy-Item .env.example .env
 docker compose up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Compose builds the React client into the API image and starts the API with Redis. Redis AOF and a named volume preserve links and filter data across container restarts.
-
-Compose defaults work without a `.env` file. Copy `.env.example` to `.env` if you want to change ports or Bloom filter sizing.
+Open [http://localhost:3000](http://localhost:3000). Docker Compose runs MySQL, Redis, and the Node API. MySQL and Redis data use separate named volumes.
 
 Stop the services:
 
@@ -34,7 +36,7 @@ Stop the services:
 docker compose down
 ```
 
-Remove the Redis volume as well:
+Delete both database volumes as well:
 
 ```bash
 docker compose down -v
@@ -46,9 +48,9 @@ docker compose down -v
 |---|---|
 | `GET /` | Serves the React client. |
 | `POST /shorten` | Accepts `{ "url": "https://example.com/..." }`; returns `{ "shortUrl": "http://localhost:3000/aB3xY9" }`. |
-| `GET /:code` | Redirects with `302`; returns `404` for unknown codes. |
+| `GET /:code` | Checks Redis cache, then the Bloom filter and MySQL; redirects with 302 or returns 404. |
 | `GET /health` | Returns `{ "status": "ok" }`. |
-| `GET /stats` | Returns Bloom filter sizing, item, and false-positive statistics. |
+| `GET /stats` | Returns Bloom filter sizing, MySQL URL count, and estimated false-positive rate. |
 
 Example:
 
@@ -58,29 +60,31 @@ curl -X POST http://localhost:3000/shorten \
   -d '{"url":"https://example.com/a/long/path"}'
 ```
 
-## How the Bloom filter works
+## MySQL, Redis cache, and Bloom filter
 
-The filter is a Redis bitmap sized for 1,000,000 links at a 1% target false-positive rate: 9,585,059 bits and 7 hash positions per code.
+`short_urls` in MySQL is the source of truth. Its case-sensitive alias primary key prevents duplicate short codes. Redis stores successful lookups under `cache:url:<code>` with a configurable TTL. A cache hit redirects without querying MySQL.
 
-- A negative result means the code is definitely absent, so the API returns `404` without `GET url:<code>`.
-- A positive result may be a false positive, so the API checks Redis before deciding whether to redirect.
-- On startup, the API rebuilds missing or outdated filter metadata from `url:*` keys using `SCAN`.
+On a cache miss, the Bloom filter checks whether the alias may exist in MySQL. A definite miss returns 404 without a SQL lookup; a possible match queries MySQL, caches a found URL, and redirects. A Bloom positive is never treated as proof that the alias exists.
 
-Run the benchmark while Compose is up:
+The filter is sized from `BLOOM_EXPECTED_ITEMS` and `BLOOM_FALSE_POSITIVE_RATE`. At startup, missing or incompatible filter metadata triggers a paged rebuild from MySQL aliases. Existing Redis-only `url:<code>` keys are imported before this rebuild.
+
+## Benchmark
+
+With the app running:
 
 ```bash
 docker compose exec api npm run benchmark
 ```
 
-The benchmark sends 10,000 random unknown-code requests and reports URL GETs avoided. In one run against an empty Redis database, it completed all requests in 2.83 seconds and avoided 10,000 of 10,000 URL GETs. The result depends on the stored data and false-positive rate.
+The benchmark generates 10,000 unknown codes and reports MySQL lookups the filter predicts it avoided, along with HTTP request duration. It does not run a no-filter comparison.
 
 ## Tests
 
 ```bash
-docker compose run --rm -e REDIS_DB=15 api npm test
+docker compose run --rm -e REDIS_DB=15 -e MYSQL_DATABASE=url_shortener_test api npm test
 ```
 
-Tests use Redis database 15 so they do not clear the normal database.
+Tests use Redis DB 15 and the separate `url_shortener_test` MySQL database.
 
 ## Project structure
 
@@ -89,16 +93,17 @@ url-shortener/
 ├── client/                       # React UI and Bloom stats panel
 ├── server/
 │   ├── scripts/                  # Docker dev watcher and benchmark
+│   ├── sql/                      # MySQL test database initialization
 │   ├── src/
+│   │   ├── mysql/                # Shared pool and URL repository
+│   │   ├── redis/                # Redis client and cache keys
 │   │   ├── routes/               # HTTP endpoints
-│   │   ├── services/             # URL service and Bloom filter
-│   │   ├── redis/                # Shared Redis client and keys
+│   │   ├── services/             # URL service, Bloom filter, legacy import
 │   │   ├── app.js                # Express app and static client files
 │   │   ├── config.js             # Environment validation
-│   │   └── server.js             # Startup and filter preparation
+│   │   └── server.js             # Startup and service preparation
 │   └── tests/                    # Node built-in test runner tests
 ├── Dockerfile
 ├── docker-compose.yml
-├── docker-compose.override.yml
-└── docs/
+└── docker-compose.override.yml
 ```
